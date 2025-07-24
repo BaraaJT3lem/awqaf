@@ -1,0 +1,125 @@
+{% load screen_extras %}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>الشاشة العامة</title>
+    <meta http-equiv="refresh" content="10">
+    <style>
+        body {
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f6f7;
+            color: #333;
+        }
+
+        .rooms-table {
+            display: flex;
+            flex-wrap: nowrap;
+            direction: rtl;
+            justify-content: flex-start;
+            width: 100%;
+            overflow-x: auto;
+            padding: 0 1em;
+            box-sizing: border-box;
+        }
+
+        .room-column {
+            flex: 1 1 0;
+            min-width: 160px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 0.5em;
+            background: #f9f9f9;
+            margin-left: 0.5em;
+            box-sizing: border-box;
+        }
+
+        .room-header {
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 0.5em;
+            color: #004d4d;
+            border-bottom: 1px solid #aaa;
+            padding-bottom: 0.4em;
+            text-align: right;
+        }
+
+        .student-item {
+            background-color: #ffffff;
+            padding: 0.4em 0.6em;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            gap: 0.5em;
+            direction: rtl;
+            margin-bottom: 0.4em;
+        }
+
+        .student-item .info {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex-grow: 1;
+        }
+
+        .student-item .status {
+            font-size: 0.9em;
+            padding: 2px 6px;
+            border-radius: 4px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="rooms-table">
+        {% for room in rooms %}
+            <div class="room-column">
+                <div class="room-header">لجنة {{ room }}</div>
+                {% with students=students_by_room|dict_get:room %}
+                    {% if students %}
+                        {% for student in students %}
+                        <div class="student-item">
+                            <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-grow: 1;">
+                                {{ student.number }} - {{ student.name }}
+                                {% if student.latest_grade %}
+                                    | : {{ student.latest_grade }} - {{ student.latest_result }}
+                                {% elif student.status in 'waiting,on_waiting_list' and student_wait_times %}
+                                    | {{ student_wait_times|dict_get:student.number }} دقيقة
+                                {% endif %}
+                            </div>
+                        
+                            {% if student.status != 'finished' %}
+                            <span class="status"
+                                style="font-size: 0.9em; padding: 2px 6px; border-radius: 4px;
+                                    {% if student.status == 'in_exam' %}
+                                        background-color: #2ecc71; color: white;
+                                    {% elif student.status == 'waiting' %}
+                                        background-color: #f1c40f; color: white;
+                                    {% elif student.status == 'on_waiting_list' %}
+                                        background-color: #e67e22; color: white;
+                                    {% else %}
+                                        background-color: #bdc3c7;
+                                    {% endif %}">
+                                {{ student.get_status_display }}
+                            </span>
+                            {% endif %}
+                        </div>
+                        
+                        {% endfor %}
+                    {% else %}
+                        <div>لا يوجد طلاب</div>
+                    {% endif %}
+                {% endwith %}
+            </div>
+        {% endfor %}
+    </div>
+</body>
+</html>

@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+{% load screen_extras %}
+{% load static %}
+
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>إضافة طالب</title>
+    <style>
+        /* Your existing CSS here */
+        body {
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f6f7;
+            color: #333;
+            direction: rtl;
+        }
+
+        nav {
+            background-color: #008080;
+            padding: 1em;
+            margin-bottom: 2em;
+            display: flex;
+            justify-content: center;
+            gap: 2em;
+        }
+
+        nav a {
+            color: white;
+            font-weight: bold;
+            text-decoration: none;
+            font-size: 1.1em;
+            transition: 0.2s;
+        }
+
+        nav a:hover {
+            color: #e0f7f7;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: auto;
+            background: white;
+            padding: 2em;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        h2, h3 {
+            color: #006666;
+            text-align: center;
+            margin-bottom: 1em;
+        }
+
+        form {
+            margin-bottom: 1.5em;
+        }
+
+        label {
+            font-weight: bold;
+            display: block;
+            margin-top: 1em;
+        }
+
+        input, select {
+            padding: 0.6em;
+            margin-top: 0.4em;
+            width: 100%;
+            font-size: 1em;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            direction: rtl;
+        }
+
+        button {
+            background-color: #008080;
+            color: white;
+            border: none;
+            padding: 0.6em 1.2em;
+            border-radius: 6px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-top: 1em;
+        }
+
+        button:hover {
+            background-color: #006666;
+        }
+
+        .danger-button {
+            background-color: #c0392b;
+        }
+
+        .danger-button:hover {
+            background-color: #922b21;
+        }
+
+        .rooms-table {
+            display: flex;
+            flex-wrap: nowrap;
+            direction: rtl;
+            justify-content: space-between;
+            width: 100%;
+            overflow-x: auto;
+            padding: 0 1em;
+            box-sizing: border-box;
+        }
+
+        .room-column {
+            flex: 1 1 0;
+            min-width: 140px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 0.5em;
+            background: #f9f9f9;
+            margin-left: 0.5em;
+            box-sizing: border-box;
+        }
+
+        .room-header {
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 0.5em;
+            color: #004d4d;
+            border-bottom: 1px solid #aaa;
+            padding-bottom: 0.4em;
+        }
+
+        .student-item {
+            margin: 0.4em 0;
+            background-color: #ffffff;
+            padding: 0.4em 0.6em;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .student-item select {
+            margin-top: 0.4em;
+            width: auto;
+        }
+
+        .student-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .delete-button {
+            background-color: #c0392b;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .delete-button:hover {
+            background-color: #922b21;
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a href="/screen/add-student">إضافة طالب</a>
+    <a href="/screen">عرض الشاشة</a>
+    <a href="{% url 'edit_settings' %}">تعديل الإعدادات</a>
+
+    <form method="post" action="{% url 'logout' %}" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" style="background:none; border:none; color:white; cursor:pointer;">
+            تسجيل الخروج
+        </button>
+    </form>
+</nav>
+
+<div class="container">
+    {% if messages %}
+    <ul style="list-style: none; padding: 0;">
+        {% for message in messages %}
+            <li style="color: {% if message.tags == 'error' %}red{% else %}green{% endif %};">
+                {{ message }}
+            </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <h2>إضافة طالب</h2>
+
+    <!-- Upload Excel -->
+    <form method="post" action="{% url 'upload_excel' %}" enctype="multipart/form-data" style="margin-bottom: 2em;">
+        {% csrf_token %}
+        <label for="file">رفع ملف Excel لإضافة طلاب:</label>
+        <input type="file" name="file" accept=".xlsx" required>
+        <button type="submit">رفع وإضافة الطلاب</button>
+    </form>
+
+    <!-- Export Excel -->
+    <form id="export-form" method="get" action="{% url 'export_students_excel' %}">
+        <label for="institute-select">اختر المعهد للتصدير:</label>
+        <select name="institute" id="institute-select" required>
+            <option value="__all__">جميع المعاهد</option>
+            {% for inst in all_institutes %}
+                <option value="{{ inst }}">{{ inst }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">تصدير إلى إكسل</button>
+    </form>
+    
+    <script>
+        document.getElementById('export-form').addEventListener('submit', function(e) {
+            const select = document.getElementById('institute-select');
+            if (!select.value) {
+                e.preventDefault();
+                alert('يرجى اختيار اسم المعهد أولاً');
+            }
+        });
+    
+
+    
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const exportForm = document.getElementById('export-form');
+            const instituteInput = document.getElementById('institute-input');
+
+            // Try to find any student’s institute on the page
+            const firstInstitute = document.querySelector('[data-institute-name]');
+            if (firstInstitute) {
+                instituteInput.value = firstInstitute.dataset.instituteName;
+            }
+
+            exportForm.addEventListener('submit', (e) => {
+                if (!instituteInput.value) {
+                    e.preventDefault();
+                    alert('يرجى اختيار اسم المعهد أولاً');
+                }
+            });
+        });
+    </script>
+
+    <!-- Add single student -->
+    <form method="post">
+        {% csrf_token %}
+        <div dir="rtl">
+            <label for="id_name">الاسم والكنية:</label>
+            {{ form.name }}
+
+            <label for="id_father_name">اسم الأب:</label>
+            {{ form.father_name }}
+
+            <label for="id_birth_date">تاريخ الولادة:</label>
+            {{ form.birth_date }}
+
+            <label for="id_institute_name">اسم المعهد:</label>
+            {{ form.institute_name }}
+
+            <label for="id_exam_type">غيباً/نظراً:</label>
+            {{ form.exam_type }}
+
+            <label for="id_memorized_parts">الأجزاء المحفوظة:</label>
+            {{ form.memorized_parts }}
+
+            <label for="id_room">اللجنة:</label>
+            {{ form.room }}
+        </div>
+        <button type="submit">إضافة</button>
+    </form>
+
+    <!-- Buttons -->
+    <form method="post" action="{% url 'clear_students' %}" style="display:inline; margin-left: 1em;">
+        {% csrf_token %}
+        <button type="submit" onclick="return confirm('هل أنت متأكد أنك تريد مسح جميع الطلاب؟');" class="danger-button">
+            مسح جميع الطلاب
+        </button>
+    </form>
+    <form method="post" action="{% url 'clear_all_results' %}" style="display:inline; margin-left: 1em;">
+        {% csrf_token %}
+        <button type="submit" onclick="return confirm('هل أنت متأكد أنك تريد مسح جميع النتائج؟');" class="danger-button">
+            مسح جميع النتائج
+        </button>
+    </form>
+    
+    <form method="post" action="{% url 'apply_automatic_status' %}" style="display:inline; margin-left: 1em;">
+        {% csrf_token %}
+        <button type="submit">التوزيع التلقائي للحالة</button>
+    </form>
+
+    <!-- Rooms Display -->
+    <div class="rooms-table">
+        {% for room in rooms %}
+            <div class="room-column">
+                <div class="room-header">لجنة {{ room }}</div>
+                {% with students=students_by_room|get_item:room %}
+                    {% if students %}
+                        {% for student in students %}
+                        <div class="student-item" data-institute-name="{{ student.institute_name }}">
+                            <div>
+                                {{ student.number }} {{ student.name }}
+                            </div>
+                            <div class="student-actions">
+                                <!-- Status Update Form -->
+                                <form method="post" action="{% url 'update_student_status' student.number %}">
+                                    {% csrf_token %}
+                                    <select name="status" onchange="this.form.submit()">
+                                        {% for val, label in status_choices %}
+                                            <option value="{{ val }}" {% if student.status == val %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                        <option value="remove">حذف</option>
+                                    </select>
+                                </form>
+
+                                <!-- Delete Form -->
+                                <form method="post" action="{% url 'remove_student' student.number %}" onsubmit="return confirm('هل أنت متأكد أنك تريد حذف هذا الطالب؟');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="delete-button">حذف</button>
+                                </form>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div>لا يوجد طلاب</div>
+                    {% endif %}
+                {% endwith %}
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+</body>
+</html>

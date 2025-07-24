@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8" />
+    <title>{{ student.name }}</title>
+    <style>
+        body { font-family: sans-serif; padding: 1em; background: #f9f9f9; }
+        .student-info { background: white; padding: 1em; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); max-width: 1000px; margin: auto; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 1em; }
+        th, td { text-align: center; padding: 8px; border: 1px solid #ddd; }
+        th { background-color: #e0f7fa; }
+        button { background-color: teal; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #004d40; }
+        .mistake-label {
+            cursor: pointer;
+            display: inline-block;
+            background-color: #b2dfdb;
+            border-radius: 4px;
+            padding: 5px 10px;
+            margin: 3px;
+            user-select: none;
+            transition: background-color 0.3s;
+        }
+        .mistake-label:hover {
+            background-color: #80cbc4;
+        }
+        .mistakes-container {
+            margin-top: 10px;
+            text-align: right;
+            font-size: 0.9em;
+            color: #333;
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 8px;
+            border-radius: 4px;
+            background-color: #fafafa;
+        }
+        .mistake-line { margin-bottom: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="student-info">
+    <table>
+        <tr><th>رقم الطالب</th><td>{{ student.number }}</td></tr>
+        <tr><th>الاسم والكنية</th><td>{{ student.name }}</td></tr>
+        <tr><th>اسم الأب</th><td>{{ student.father_name|default:"لا يوجد بيانات" }}</td></tr>
+        <tr><th>تولد</th><td>{% if student.birth_date %}{{ student.birth_date|date:"Y" }}{% else %}غير محدد{% endif %}</td></tr>
+        <tr><th>اسم المعهد</th><td>{{ student.institute_name|default:"لا يوجد بيانات" }}</td></tr>
+        <tr><th>نوع الامتحان</th><td>{{ student.get_exam_type_display|default:"لا يوجد بيانات" }}</td></tr>
+        <tr><th>الأجزاء</th><td>{{ student.memorized_parts|default:"لا يوجد بيانات" }}</td></tr>
+    </table>
+
+    {% if student.exam_type == "gh" %}
+        {% include "mobileapp/form_gh.html" %}
+    {% else %}
+        {% include "mobileapp/form_nz.html" %}
+    {% endif %}
+</div>
+
+<script>
+    function updateMistakeDisplay(question, category, value, text) {
+        const container = document.getElementById(`mistakes-${question}`);
+        const line = document.createElement('div');
+        line.className = 'mistake-line';
+        line.dataset.value = value;
+        line.dataset.category = category;
+        line.textContent = `خطأ في ${category}: ${text}`;
+    
+        line.addEventListener('click', () => {
+            line.remove();
+            calculateFinalGrade();
+        });
+    
+        container.appendChild(line);
+    }
+    
+    function calculateFinalGrade() {
+        let totalDeduction = 0;
+    
+        document.querySelectorAll('.mistake-line').forEach(line => {
+            const value = parseFloat(line.dataset.value);
+            if (!isNaN(value)) totalDeduction += value;
+        });
+    
+        const grade = Math.max(0, 100 - totalDeduction);
+    
+        // Update all inputs with names starting with final_grade
+        document.querySelectorAll('input[name^="final_grade"]').forEach(input => {
+            input.value = grade;
+            console.log(`Updated ${input.name} to`, grade);
+        });
+    
+        const collected = {};
+        document.querySelectorAll('.mistakes-container').forEach(container => {
+            const q = container.id.replace('mistakes-', '');
+            collected[q] = [];
+            container.querySelectorAll('.mistake-line').forEach(line => {
+                collected[q].push({
+                    category: line.dataset.category,
+                    value: parseFloat(line.dataset.value),
+                    text: line.textContent
+                });
+            });
+        });
+    
+        // Update all inputs with names starting with mistakes_json
+        document.querySelectorAll('input[name^="mistakes_json"]').forEach(input => {
+            const jsonStr = JSON.stringify(collected);
+            input.value = jsonStr;
+            console.log(`Updated ${input.name} to`, jsonStr);
+        });
+    
+        console.log('Total Deduction:', totalDeduction);
+        console.log('Final Grade:', grade);
+        console.log('Collected Mistakes:', collected);
+    }
+    
+    
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.mistake-label').forEach(label => {
+            label.addEventListener('click', () => {
+                const q = label.dataset.question;
+                const cat = label.dataset.category;
+                const val = parseFloat(label.dataset.value);
+                const txt = label.textContent;
+    
+                updateMistakeDisplay(q, cat, val, txt);
+                calculateFinalGrade();
+            });
+        });
+    
+        document.querySelectorAll('form#grade-form').forEach(form => {
+            form.addEventListener('submit', e => {
+                calculateFinalGrade();
+    
+                // no preventDefault so form submits normally with updated inputs
+            });
+        });
+    });
+    </script>
+    
+    
+
+</body>
+</html>

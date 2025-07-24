@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+{% load mobileapp_extras %}
+<head>
+    <meta charset="UTF-8">
+    <title>الطلاب في {{ room_name|replace:"room,اللجنة " }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: sans-serif; padding: 1em; background-color: #f0f0f0; }
+        h2 { color: teal; text-align: center; }
+        .student { background: white; padding: 1em; margin-bottom: 1em; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+    </style>
+    <script>
+        setTimeout(() => location.reload(), 10000);  // Refresh every 10 seconds
+    </script>
+</head>
+<body>
+    <h2>الطلاب في {{ room_name|replace:"room,اللجنة " }}</h2>
+    {% for student in students %}
+        <div class="student">
+            <strong>{{ student.number }}</strong> -
+            <a href="{% url 'mark_student' student.number %}">{{ student.name }}</a>
+
+            - <span style="color: {% if student.status == 'in_exam' %}green{% elif student.status == 'waiting' %}orange{% else %}gray{% endif %};">
+                {{ student.get_status_display }}
+              </span>
+        </div>
+    {% empty %}
+        <p>لا يوجد طلاب في هذه اللجنة.</p>
+    {% endfor %}
+    
+</body>
+</html>
