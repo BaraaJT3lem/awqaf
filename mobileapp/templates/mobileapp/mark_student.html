@@ -84,12 +84,11 @@
             if (!isNaN(value)) totalDeduction += value;
         });
     
-        const grade = Math.max(0, 100 - totalDeduction);
+        const grade = Math.max(-100, 100 - totalDeduction);
     
         // Update all inputs with names starting with final_grade
         document.querySelectorAll('input[name^="final_grade"]').forEach(input => {
             input.value = grade;
-            console.log(`Updated ${input.name} to`, grade);
         });
     
         const collected = {};
@@ -109,12 +108,8 @@
         document.querySelectorAll('input[name^="mistakes_json"]').forEach(input => {
             const jsonStr = JSON.stringify(collected);
             input.value = jsonStr;
-            console.log(`Updated ${input.name} to`, jsonStr);
         });
     
-        console.log('Total Deduction:', totalDeduction);
-        console.log('Final Grade:', grade);
-        console.log('Collected Mistakes:', collected);
     }
     
     

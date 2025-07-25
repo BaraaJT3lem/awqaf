@@ -1,4 +1,4 @@
-<form method="post" id="grade-form" action="{% url 'submit_grade' student.number %}">
+<form id="grade-form" method="POST" action="{% url 'submit_grade' student.number %}">
     {% csrf_token %}
 
     <table>

@@ -11,21 +11,19 @@ class StudentForm(forms.ModelForm):
         labels = {
             'name': 'الاسم والكنية',
             'father_name': 'اسم الأب',
-            'birth_date': 'تاريخ الولادة',
+            'birth_date': 'عام التولد',
             'institute_name': 'اسم المعهد',
             'exam_type': 'غيباً/نظراً',
             'memorized_parts': 'الأجزاء المحفوظة',
             'room': 'اللجنة',
         }
-        widgets = {
-            'birth_date': forms.DateInput(attrs={'type': 'date'}),
-        }
+
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         room_count = ScreenSettings.get_room_count()
         self.fields['room'].widget = forms.Select(
-            choices=[('', '--- اختر لجنة ---')] + [(i, f'اللجنة {i}') for i in range(1, room_count + 1)]
+            choices=[('', 'اختيار لجنة تلقائي')] + [(i, f'اللجنة {i}') for i in range(1, room_count + 1)]
         )
 
     def clean_room(self):

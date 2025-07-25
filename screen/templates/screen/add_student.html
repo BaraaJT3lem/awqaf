@@ -7,7 +7,6 @@
     <meta charset="UTF-8">
     <title>إضافة طالب</title>
     <style>
-        /* Your existing CSS here */
         body {
             font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
@@ -47,7 +46,7 @@
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
         }
 
-        h2, h3 {
+        h2 {
             color: #006666;
             text-align: center;
             margin-bottom: 1em;
@@ -82,7 +81,6 @@
             font-size: 1em;
             cursor: pointer;
             transition: background-color 0.2s;
-            margin-top: 1em;
         }
 
         button:hover {
@@ -115,7 +113,6 @@
             border-radius: 6px;
             padding: 0.5em;
             background: #f9f9f9;
-            margin-left: 0.5em;
             box-sizing: border-box;
         }
 
@@ -128,22 +125,48 @@
             padding-bottom: 0.4em;
         }
 
-        .student-item {
-            margin: 0.4em 0;
-            background-color: #ffffff;
-            padding: 0.4em 0.6em;
-            border-radius: 5px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+        .logout-button {
+            color: white;
+            font-weight: bold;
+            font-size: 1.1em;
+            background-color: #008080;
+            border: none;
         }
 
         .student-item select {
             margin-top: 0.4em;
             width: auto;
         }
-
+        
+        /* Style for the up/down arrow buttons */
+        .student-item form {
+            display: inline-block;
+            margin: 0 2px;
+            vertical-align: middle;
+        }
+        
+        .student-item form button {
+            font-size: 0.8em;       /* smaller font size */
+            padding: 2px 4px;       /* minimal padding */
+            line-height: 1;         /* tighten line height */
+            background: none;
+            border: none;
+            cursor: pointer;
+            user-select: none;
+            color: #006666;         /* teal color */
+            transition: color 0.2s ease;
+        }
+        
+        .student-item form button:hover {
+            color: #004d4d;         /* darker teal on hover */
+        }
+        
+        .student-item > div:first-of-type {
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 6px;
+        }
+        
         .student-actions {
             display: flex;
             gap: 8px;
@@ -172,11 +195,9 @@
     <a href="/screen">عرض الشاشة</a>
     <a href="{% url 'edit_settings' %}">تعديل الإعدادات</a>
 
-    <form method="post" action="{% url 'logout' %}" style="display:inline;">
+    <form method="post" action="{% url 'logout' %}">
         {% csrf_token %}
-        <button type="submit" style="background:none; border:none; color:white; cursor:pointer;">
-            تسجيل الخروج
-        </button>
+        <button type="submit" class="logout-button">تسجيل الخروج</button>
     </form>
 </nav>
 
@@ -212,37 +233,6 @@
         </select>
         <button type="submit">تصدير إلى إكسل</button>
     </form>
-    
-    <script>
-        document.getElementById('export-form').addEventListener('submit', function(e) {
-            const select = document.getElementById('institute-select');
-            if (!select.value) {
-                e.preventDefault();
-                alert('يرجى اختيار اسم المعهد أولاً');
-            }
-        });
-    
-
-    
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const exportForm = document.getElementById('export-form');
-            const instituteInput = document.getElementById('institute-input');
-
-            // Try to find any student’s institute on the page
-            const firstInstitute = document.querySelector('[data-institute-name]');
-            if (firstInstitute) {
-                instituteInput.value = firstInstitute.dataset.instituteName;
-            }
-
-            exportForm.addEventListener('submit', (e) => {
-                if (!instituteInput.value) {
-                    e.preventDefault();
-                    alert('يرجى اختيار اسم المعهد أولاً');
-                }
-            });
-        });
-    </script>
 
     <!-- Add single student -->
     <form method="post">
@@ -254,7 +244,7 @@
             <label for="id_father_name">اسم الأب:</label>
             {{ form.father_name }}
 
-            <label for="id_birth_date">تاريخ الولادة:</label>
+            <label for="id_birth_date">سنة التولد:</label>
             {{ form.birth_date }}
 
             <label for="id_institute_name">اسم المعهد:</label>
@@ -272,7 +262,7 @@
         <button type="submit">إضافة</button>
     </form>
 
-    <!-- Buttons -->
+    <!-- Action Buttons -->
     <form method="post" action="{% url 'clear_students' %}" style="display:inline; margin-left: 1em;">
         {% csrf_token %}
         <button type="submit" onclick="return confirm('هل أنت متأكد أنك تريد مسح جميع الطلاب؟');" class="danger-button">
@@ -285,13 +275,13 @@
             مسح جميع النتائج
         </button>
     </form>
-    
+
     <form method="post" action="{% url 'apply_automatic_status' %}" style="display:inline; margin-left: 1em;">
         {% csrf_token %}
         <button type="submit">التوزيع التلقائي للحالة</button>
     </form>
 
-    <!-- Rooms Display -->
+    <!-- Student display by room -->
     <div class="rooms-table">
         {% for room in rooms %}
             <div class="room-column">
@@ -300,11 +290,19 @@
                     {% if students %}
                         {% for student in students %}
                         <div class="student-item" data-institute-name="{{ student.institute_name }}">
-                            <div>
-                                {{ student.number }} {{ student.name }}
-                            </div>
+                            <!-- Up/Down arrows -->
+                                <form method="post" action="{% url 'move_student_position' student.number %}" style="display: inline;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="direction" value="up">
+                                    <button type="submit" style="background:none; border:none; cursor:pointer;" title="أعلى">🔼</button>
+                                </form>
+                                <form method="post" action="{% url 'move_student_position' student.number %}" style="display: inline;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="direction" value="down">
+                                    <button type="submit" style="background:none; border:none; cursor:pointer;" title="أسفل">🔽</button>
+                                </form>
+                            <div>{{ student.number }} {{ student.name }}</div>
                             <div class="student-actions">
-                                <!-- Status Update Form -->
                                 <form method="post" action="{% url 'update_student_status' student.number %}">
                                     {% csrf_token %}
                                     <select name="status" onchange="this.form.submit()">
@@ -312,13 +310,13 @@
                                             <option value="{{ val }}" {% if student.status == val %}selected{% endif %}>{{ label }}</option>
                                         {% endfor %}
                                         <option value="remove">حذف</option>
+                                        {% for room_num in rooms %}
+                                            {% if room_num != student.room %}
+                                                <option value="move:{{ room_num }}">نقل إلى لجنة {{ room_num }}</option>
+                                            {% endif %}
+                                        {% endfor %}
                                     </select>
-                                </form>
-
-                                <!-- Delete Form -->
-                                <form method="post" action="{% url 'remove_student' student.number %}" onsubmit="return confirm('هل أنت متأكد أنك تريد حذف هذا الطالب؟');">
-                                    {% csrf_token %}
-                                    <button type="submit" class="delete-button">حذف</button>
+                                    
                                 </form>
                             </div>
                         </div>

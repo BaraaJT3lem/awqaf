@@ -63,6 +63,9 @@ class Student(models.Model):
     memorized_parts = models.CharField(max_length=100, verbose_name="الأجزاء المحفوظة", blank=True, null=True)
     grade = models.FloatField(null=True, blank=True)
     mistakes_json = models.TextField(null=True, blank=True)
+    position = models.PositiveIntegerField(default=0)
+
+
 
     room = models.IntegerField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='waiting')

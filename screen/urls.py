@@ -15,6 +15,10 @@ urlpatterns = [
     path('remove-student/<int:student_number>/', views.remove_student, name='remove_student'),
     path('clear-results-from-screen/', views.clear_all_results, name='clear_all_results'),
     path('export_excel/', views.export_students_excel, name='export_students_excel'),
+    path('screen/move/<int:number>/', views.move_student_position, name='move_student_position')
+
+
+
 
 
 

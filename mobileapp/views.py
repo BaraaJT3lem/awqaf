@@ -7,7 +7,7 @@ import csv
 import os
 import re
 from django.conf import settings
-
+from screen.views import apply_automatic_status
 
 def mobile_login(request):
     if request.method == 'POST':
@@ -33,7 +33,7 @@ def room_view(request, room_name):
     except ValueError:
         return redirect('/mobileapp/login')
 
-    students = Student.objects.filter(room=room_number).exclude(status='finished').order_by('number')
+    students = Student.objects.filter(room=room_number).exclude(status='finished').order_by('position')
 
 
     return render(request, 'mobileapp/room_view.html', {
@@ -83,12 +83,13 @@ def mark_student_view(request, student_number):
         room = student.room
         student.delete()
 
-        next_student = Student.objects.filter(room=room, status='waiting').order_by('number').first()
+        next_student = Student.objects.filter(room=room, status='waiting').order_by('position').first()
+        
         if next_student:
             next_student.status = 'in_exam'
             next_student.save()
 
-        nxt_student = Student.objects.filter(room=room, status='on_waiting_list').order_by('number').first()
+        nxt_student = Student.objects.filter(room=room, status='on_waiting_list').order_by('position').first()
         if nxt_student:
             nxt_student.status = 'waiting'
             nxt_student.save()
@@ -103,3 +104,4 @@ def mark_student_view(request, student_number):
         'form': form,
         'questions': questions,
     })
+

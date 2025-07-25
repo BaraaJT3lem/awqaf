@@ -86,33 +86,37 @@
                 {% with students=students_by_room|dict_get:room %}
                     {% if students %}
                         {% for student in students %}
-                        <div class="student-item">
-                            <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-grow: 1;">
+                        <div class="student-item"
+                             style="
+                                {% if student.status == 'in_exam' %}
+                                    background-color: #2ecc71;
+                                    color: white;
+                                {% elif student.status == 'waiting' %}
+                                    background-color: #f1c40f;
+                                    color: black;
+                                {% elif student.status == 'on_waiting_list' %}
+                                    background-color: #e67e22;
+                                    color: white;
+                                {% else %}
+                                    background-color: #bdc3c7;
+                                    color: black;
+                                {% endif %}
+                                padding: 0.4em 0.6em;
+                                border-radius: 6px;
+                                margin-bottom: 0.4em;
+                                white-space: nowrap;
+                                overflow: hidden;
+                                text-overflow: ellipsis;
+                             ">
+                            <div style="flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                 {{ student.number }} - {{ student.name }}
                                 {% if student.latest_grade %}
                                     | : {{ student.latest_grade }} - {{ student.latest_result }}
                                 {% elif student.status in 'waiting,on_waiting_list' and student_wait_times %}
-                                    | {{ student_wait_times|dict_get:student.number }} دقيقة
+                                    | {{ student_wait_times|dict_get:student.number }} 
                                 {% endif %}
                             </div>
-                        
-                            {% if student.status != 'finished' %}
-                            <span class="status"
-                                style="font-size: 0.9em; padding: 2px 6px; border-radius: 4px;
-                                    {% if student.status == 'in_exam' %}
-                                        background-color: #2ecc71; color: white;
-                                    {% elif student.status == 'waiting' %}
-                                        background-color: #f1c40f; color: white;
-                                    {% elif student.status == 'on_waiting_list' %}
-                                        background-color: #e67e22; color: white;
-                                    {% else %}
-                                        background-color: #bdc3c7;
-                                    {% endif %}">
-                                {{ student.get_status_display }}
-                            </span>
-                            {% endif %}
                         </div>
-                        
                         {% endfor %}
                     {% else %}
                         <div>لا يوجد طلاب</div>
@@ -123,3 +127,4 @@
     </div>
 </body>
 </html>
+

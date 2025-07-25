@@ -1,29 +1,36 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from collections import defaultdict, Counter
-from django.shortcuts import redirect, get_object_or_404
-from django.db.models import OuterRef, Subquery
-import random
-from .models import Student, STATUS_CHOICES, ScreenSettings
-from .forms import StudentForm
 from django.db.models import Max
-from django.utils.timezone import now, timedelta
-import json
-from django import forms
-from .models import Student
-from .forms import ScreenSettingsForm
-from .models import ExamResult
-import openpyxl
-import os
-import csv
-from django.conf import settings
+import random
+from collections import defaultdict
+from django.db.models import Max
+from django.utils import timezone
+from .models import Student, ScreenSettings, ExamResult, STATUS_CHOICES
+from .forms import StudentForm, ScreenSettingsForm
 from django.contrib import messages
-import datetime
 from django.http import HttpResponse
+from django.utils.encoding import smart_str
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
-from django.utils.encoding import smart_str
+from datetime import datetime, time, timedelta
+from django.utils.timezone import make_aware, localtime, get_current_timezone
+from collections import defaultdict
+from django.db.models import Max
+from .models import Student, ExamResult, ScreenSettings
+from django.shortcuts import render
+import datetime
+import os
+
+import csv
+from datetime import datetime, timedelta
+from django.utils.timezone import localtime
+import openpyxl
+from django.conf import settings
+import json
+from django.db import models
+
 
 def get_room_count():
     settings = ScreenSettings.objects.last()
@@ -36,69 +43,22 @@ def get_least_loaded_room():
     for r in rooms:
         counts.setdefault(r, 0)
     return min(rooms, key=lambda r: counts[r])
-@login_required
-def add_student(request):
-    if request.method == 'POST':
-        form = StudentForm(request.POST)
-        if form.is_valid():
-            student = form.save(commit=False)
-
-            if not student.room:
-                room_count = get_room_count()
-                all_rooms = list(range(1, room_count + 1))
-
-                # Count how many students are in each room
-                room_counts = Counter(Student.objects.values_list('room', flat=True))
-
-                # Ensure every room is present
-                for room in all_rooms:
-                    room_counts.setdefault(room, 0)
-
-                # Find the minimum number of students in any room
-                min_count = min(room_counts.values())
-
-                # Filter only rooms with the fewest students
-                candidate_rooms = [room for room, count in room_counts.items() if count == min_count]
-
-                # Randomly choose one of those
-                student.room = random.choice(candidate_rooms)
-
-            student.save()
-            return redirect('/screen/add-student')
-    else:
-        form = StudentForm()
-
-    students_by_room = defaultdict(list)
-    for student in Student.objects.all().order_by('number'):
-        students_by_room[student.room].append(student)
-
-    # Add this to get the distinct institutes for dropdown
-    all_institutes = Student.objects.values_list('institute_name', flat=True).distinct().order_by('institute_name')
-
-    return render(request, 'screen/add_student.html', {
-        'form': form,
-        'students_by_room': students_by_room,
-        'rooms': range(1, get_room_count() + 1),
-        'status_choices': STATUS_CHOICES,
-        'all_institutes': all_institutes,  # Add this line
-    })
-
-
 
 
 def public_screen(request):
-    # Get all students ordered by number
-    students = list(Student.objects.all().order_by('number'))
+    # Order by room and student position instead of number
+    students = list(Student.objects.all().order_by('room', 'position'))
 
-    # Fetch the latest ExamResult for each student (by highest ID)
-    latest_ids = (ExamResult.objects
-                  .values('number')
-                  .annotate(latest_id=Max('id'))
-                  .values_list('latest_id', flat=True))
-
+    # Fetch the latest ExamResult for each student
+    latest_ids = (
+        ExamResult.objects
+        .values('number')
+        .annotate(latest_id=Max('id'))
+        .values_list('latest_id', flat=True)
+    )
     results = ExamResult.objects.filter(id__in=latest_ids)
 
-    # Map results to student number for fast lookup
+    # Map student number → grade/result
     latest_results = {
         res.number: {
             'grade': res.grade,
@@ -113,33 +73,46 @@ def public_screen(request):
         student.latest_grade = result['grade'] if result else None
         student.latest_result = result['result'] if result else None
 
-    # Group students by their room number
+    # Group students by room
     students_by_room = defaultdict(list)
     for student in students:
         students_by_room[student.room].append(student)
 
-    # Sort each room's students so that finished students come last,
-    # but keep ascending order by student number otherwise
+    # Optional: sort within room (finished last, but keep order otherwise)
     for room, room_students in students_by_room.items():
-        room_students.sort(key=lambda s: (s.status == 'finished', s.number))
+        room_students.sort(key=lambda s: (s.status == 'finished', s.position))
 
-    # Estimated time from settings
+    # Load screen settings
     screen_settings = ScreenSettings.get_settings()
     estimate_minutes = screen_settings.estimate_time_per_student or 5
 
-    # Compute estimated waiting time for students in waiting/on_waiting_list
+    # Get exam start time from settings (datetime.time) or default to 7:00 AM
+    exam_start_time_value = screen_settings.exam_start_time or time(7, 0)
+
+    # Combine with today's date to form a naive datetime
+    today = datetime.today()
+    naive_start_datetime = datetime.combine(today, exam_start_time_value)
+
+    # Make timezone aware
+    tz = get_current_timezone()
+    exam_start_time = make_aware(naive_start_datetime, timezone=tz)
+    exam_start_time = localtime(exam_start_time)  # Convert to local time if needed
+
+
     student_wait_times = {}
     for room, students_in_room in students_by_room.items():
         waiting_students = [s for s in students_in_room if s.status in ['waiting', 'on_waiting_list']]
         for idx, student in enumerate(waiting_students):
-            student_wait_times[student.number] = (idx + 1) * estimate_minutes
+            wait_delta = timedelta(minutes=(idx + 1) * estimate_minutes)
+            wait_time = exam_start_time + wait_delta
+            student_wait_times[student.number] = wait_time.strftime("%I:%M").lstrip("0")
+
 
     return render(request, 'screen/public_screen.html', {
         'students_by_room': students_by_room,
         'rooms': range(1, get_room_count() + 1),
         'student_wait_times': student_wait_times,
     })
-
 @login_required
 def clear_students(request):
     if request.method == 'POST':
@@ -147,7 +120,8 @@ def clear_students(request):
     return redirect('/screen/add-student')
 
 def apply_automatic_status_for_room(room):
-    students = Student.objects.filter(room=room).order_by('number')
+    students = Student.objects.filter(room=room).exclude(status='finished').order_by('position')
+
     for i, student in enumerate(students):
         if i == 0:
             student.status = 'in_exam'
@@ -157,6 +131,7 @@ def apply_automatic_status_for_room(room):
             student.status = 'on_waiting_list'
         student.save()
 
+
 def update_student_status(request, student_number):
     if request.method == 'POST':
         student = get_object_or_404(Student, number=student_number)
@@ -165,12 +140,32 @@ def update_student_status(request, student_number):
         if new_status == "remove":
             student.delete()
             messages.success(request, f"تم حذف الطالب {student.name}")
+
+        elif new_status.startswith("move:"):
+            try:
+                new_room = int(new_status.split(":")[1])
+                student.room = new_room
+                # Assign next available position in new room
+                max_position = (
+                    Student.objects.filter(room=new_room)
+                    .aggregate(max_pos=models.Max('position'))['max_pos']
+                )
+                student.position = (max_position or 0) + 1
+                student.save()
+                messages.success(request, f"تم نقل الطالب {student.name} إلى لجنة {new_room}")
+            except:
+                messages.error(request, "حدث خطأ أثناء نقل الطالب")
+
         else:
             student.status = new_status
             student.save()
             messages.success(request, f"تم تحديث حالة الطالب {student.name} إلى {student.get_status_display()}")
 
+        # Always reapply automatic status for the two rooms involved
+        apply_automatic_status_for_room(student.room)
+    
     return redirect('add_student')
+
 
 
 def apply_automatic_status():
@@ -180,7 +175,8 @@ def apply_automatic_status():
     rooms = Student.objects.values_list('room', flat=True).distinct()
 
     for room in rooms:
-        students = Student.objects.filter(room=room).exclude(status='finished').order_by('number')
+        # ORDER BY 'position' to reflect current order after moves
+        students = Student.objects.filter(room=room).exclude(status='finished').order_by('position')
         for i, student in enumerate(students):
             if i == 0:
                 student.status = 'in_exam'
@@ -191,10 +187,54 @@ def apply_automatic_status():
             student.save()
 
 
+
 @login_required
 def trigger_automatic_status(request):
     apply_automatic_status()
     return redirect('/screen/add-student')
+
+@login_required
+def add_student(request):
+    form = StudentForm()
+
+    if request.method == 'POST' and 'name' in request.POST:
+        form = StudentForm(request.POST)
+        if form.is_valid():
+            student = form.save(commit=False)
+
+            # Set position to the next available one in the room
+            max_position = (
+                Student.objects.filter(room=student.room)
+                .aggregate(max_pos=Max('position'))
+            )['max_pos']
+            student.position = (max_position or 0) + 1
+            student.save()
+            messages.success(request, 'تمت إضافة الطالب بنجاح.')
+            return redirect('add_student')
+        else:
+            messages.error(request, 'الرجاء التحقق من صحة البيانات.')
+
+    rooms = list(range(1, get_room_count() + 1))
+    students_by_room = {
+        room: Student.objects.filter(room=room).order_by('position')
+        for room in rooms
+    }
+
+    all_institutes = (
+        Student.objects.values_list('institute_name', flat=True)
+        .distinct()
+        .order_by('institute_name')
+    )
+
+    context = {
+        'form': form,
+        'rooms': rooms,
+        'students_by_room': students_by_room,
+        'status_choices': STATUS_CHOICES,
+        'all_institutes': all_institutes,
+    }
+
+    return render(request, 'screen/add_student.html', context)
 
 
 @require_POST
@@ -208,7 +248,6 @@ def submit_grade(request, student_number):
         final_grade = float(request.POST.get("final_grade1", "100"))
     else:
         final_grade = 1 
-
 
     if student.exam_type == "gh":
         pass_threshold = 80
@@ -226,9 +265,6 @@ def submit_grade(request, student_number):
     # Validate number of questions in mistakes
     answered_questions = len(mistakes.keys())
     if answered_questions < expected_questions:
-        # You can raise an error or handle as you want
-        # For example:
-        # return HttpResponseBadRequest("Not all questions answered.")
         pass  # or just continue
 
     result = "ناجح" if final_grade >= pass_threshold else "إعادة"
@@ -241,10 +277,14 @@ def submit_grade(request, student_number):
         room=student.room
     )
 
-    apply_automatic_status()
-
+    # Mark student as finished and save first
     student.status = 'finished'
     student.save()
+    print(f"Student {student.number} marked as finished.")
+
+    # Now apply automatic status update for other students
+    apply_automatic_status()
+    print("apply_automatic_status called after student finish.")
 
     csv_path = os.path.join(settings.BASE_DIR, 'grades_log.csv')
     file_exists = os.path.isfile(csv_path)
@@ -255,9 +295,6 @@ def submit_grade(request, student_number):
         writer.writerow([student.number, student.name, final_grade, result])
 
     return redirect(f"/mobileapp/room/room{student.room}/")
-
-
-
 
 @login_required
 def edit_settings(request):
@@ -326,15 +363,15 @@ def upload_excel(request):
         except Exception as e:
             print("Error in row:", row, str(e))
             continue
-
+    apply_automatic_status()
     return redirect('/screen/add-student')
 
 def remove_student(request, student_number):
     if request.method == 'POST':
-        student = get_object_or_404(Student, id=student_number)
+        student = get_object_or_404(Student, number=student_number)
         student.delete()
         messages.success(request, "تم حذف الطالب بنجاح.")
-    return redirect('add_student')  # or your relevant page name
+    return redirect('add_student')  
 
 @require_POST
 @login_required
@@ -347,8 +384,6 @@ def clear_all_results(request):
 
     # Redirect to the add-student page after clearing
     return redirect('/screen/add-student')
-
-
 
 @login_required
 def export_students_excel(request):
@@ -445,27 +480,21 @@ def export_students_excel(request):
     ws.column_dimensions['G'].width = 15
     ws.column_dimensions['H'].width = 15
 
+    write_headers()
+    write_table_header()
+
     if institute_name == '__all__':
         grouped = defaultdict(list)
         for s in students:
             grouped[s.institute_name].append(s)
 
         for institute in sorted(grouped.keys()):
-            write_headers()
-            ws.cell(row=current_row, column=1, value=f"المعهد: {institute}")
-            current_row += 1
-            write_table_header()
-            # Sort by assigned time for this institute
-            for stu in sorted(grouped[institute], key=lambda x: student_times.get(x.number, '')):
+            sorted_students = sorted(grouped[institute], key=lambda x: student_times.get(x.number, ''))
+            for stu in sorted_students:
                 write_student_row(stu)
-            current_row += 2
         filename = f"All_Students_{datetime.date.today()}.xlsx"
     else:
         filtered_students = Student.objects.filter(institute_name=institute_name).order_by('room', 'number')
-        write_headers()
-        ws.cell(row=current_row, column=1, value=f"المعهد: {institute_name}")
-        current_row += 1
-        write_table_header()
         for student in sorted(filtered_students, key=lambda x: student_times.get(x.number, '')):
             write_student_row(student)
         filename = f"Students_{institute_name}_{datetime.date.today()}.xlsx"
@@ -475,3 +504,28 @@ def export_students_excel(request):
     wb.save(response)
     return response
 
+@require_POST
+@login_required
+def move_student_position(request, number):
+    direction = request.POST.get("direction")
+    student = get_object_or_404(Student, number=number)
+
+    same_room_students = list(Student.objects.filter(room=student.room).order_by('position'))
+
+    try:
+        index = same_room_students.index(student)
+    except ValueError:
+        return redirect('add_student')
+
+    if direction == "up" and index > 0:
+        same_room_students[index], same_room_students[index - 1] = same_room_students[index - 1], same_room_students[index]
+    elif direction == "down" and index < len(same_room_students) - 1:
+        same_room_students[index], same_room_students[index + 1] = same_room_students[index + 1], same_room_students[index]
+
+    for idx, s in enumerate(same_room_students):
+        s.position = idx
+        s.save()
+
+    apply_automatic_status()  # reassign statuses based on new order
+
+    return redirect('add_student')
