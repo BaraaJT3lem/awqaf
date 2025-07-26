@@ -18,6 +18,7 @@ from datetime import datetime, time, timedelta
 from django.utils.timezone import make_aware, localtime, get_current_timezone
 from collections import defaultdict
 from django.db.models import Max
+from django.contrib.admin.views.decorators import staff_member_required
 from .models import Student, ExamResult, ScreenSettings
 from django.shortcuts import render
 import datetime
@@ -44,8 +45,10 @@ def get_least_loaded_room():
         counts.setdefault(r, 0)
     return min(rooms, key=lambda r: counts[r])
 
-
+@login_required
+@staff_member_required
 def public_screen(request):
+    
     # Order by room and student position instead of number
     students = list(Student.objects.all().order_by('room', 'position'))
 
@@ -192,8 +195,8 @@ def apply_automatic_status():
 def trigger_automatic_status(request):
     apply_automatic_status()
     return redirect('/screen/add-student')
-
 @login_required
+@staff_member_required
 def add_student(request):
     form = StudentForm()
 
@@ -237,38 +240,42 @@ def add_student(request):
     return render(request, 'screen/add_student.html', context)
 
 
+
 @require_POST
 @login_required
 def submit_grade(request, student_number):
     student = get_object_or_404(Student, number=student_number)
 
+    # Get final grade from form based on exam type
     if student.exam_type == "gh":
         final_grade = float(request.POST.get("final_grade", "100"))
-    elif student.exam_type == "nz":
-        final_grade = float(request.POST.get("final_grade1", "100"))
-    else:
-        final_grade = 1 
-
-    if student.exam_type == "gh":
         pass_threshold = 80
         expected_questions = 3
-    else:  # nz
+    elif student.exam_type == "nz":
+        final_grade = float(request.POST.get("final_grade1", "100"))
         pass_threshold = 90
         expected_questions = 5
+    else:
+        final_grade = 1
+        pass_threshold = 0
+        expected_questions = 0
 
+    # Parse mistakes JSON
     mistakes_json_str = request.POST.get("mistakes_json", "{}")
     try:
         mistakes = json.loads(mistakes_json_str)
     except json.JSONDecodeError:
         mistakes = {}
 
-    # Validate number of questions in mistakes
+    # You can add logic here if you want to validate number of questions answered
     answered_questions = len(mistakes.keys())
     if answered_questions < expected_questions:
-        pass  # or just continue
+        pass  # Optional: add warning or ignore
 
+    # Determine result
     result = "ناجح" if final_grade >= pass_threshold else "إعادة"
 
+    # Save exam result
     ExamResult.objects.create(
         number=student.number,
         name=student.name,
@@ -277,15 +284,14 @@ def submit_grade(request, student_number):
         room=student.room
     )
 
-    # Mark student as finished and save first
+    # Update student status
     student.status = 'finished'
     student.save()
-    print(f"Student {student.number} marked as finished.")
 
-    # Now apply automatic status update for other students
+    # Call your automatic status update
     apply_automatic_status()
-    print("apply_automatic_status called after student finish.")
 
+    # Log to CSV
     csv_path = os.path.join(settings.BASE_DIR, 'grades_log.csv')
     file_exists = os.path.isfile(csv_path)
     with open(csv_path, mode='a', encoding='utf-8', newline='') as f:
@@ -294,21 +300,47 @@ def submit_grade(request, student_number):
             writer.writerow(['Student Number', 'Name', 'Final Grade', 'Result'])
         writer.writerow([student.number, student.name, final_grade, result])
 
+    # Set session flag to prevent regrading this student in this session
+    request.session[f'graded_student_{student_number}'] = True
+
+    # Redirect to the room page after grading
     return redirect(f"/mobileapp/room/room{student.room}/")
 
 @login_required
+@staff_member_required
 def edit_settings(request):
-    settings = ScreenSettings.get_settings()
+    old_settings = ScreenSettings.get_settings()
+    old_room_count = old_settings.room_count if old_settings else 0
 
     if request.method == 'POST':
-        form = ScreenSettingsForm(request.POST, instance=settings)
+        form = ScreenSettingsForm(request.POST, instance=old_settings)
         if form.is_valid():
-            form.save()
+            new_settings = form.save(commit=False)
+            new_room_count = new_settings.room_count
+
+            if new_room_count != old_room_count:
+                # Reassign all students to fit new room count
+                students = list(Student.objects.all().exclude(status="finished"))
+                room_positions = {room: 0 for room in range(1, new_room_count + 1)}
+
+                for student in students:
+                    min_room = min(room_positions, key=room_positions.get)
+                    room_positions[min_room] += 1
+                    student.room = min_room
+                    student.position = room_positions[min_room]
+                    student.save()
+
+            new_settings.save()
+
+            apply_automatic_status()
+
             return redirect('/screen/add-student')
+
     else:
-        form = ScreenSettingsForm(instance=settings)
+        form = ScreenSettingsForm(instance=old_settings)
 
     return render(request, 'screen/edit_settings.html', {'form': form})
+
 
 EXAM_TYPE_MAP = {
     "غيباً": "gh",

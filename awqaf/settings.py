@@ -42,16 +42,19 @@ INSTALLED_APPS = [
     'mobileapp',
 
 ]
-
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',            # <-- must be before auth
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',         # <-- must come after sessions
+    'django.contrib.messages.middleware.MessageMiddleware',            # <-- after auth
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+
+    # Your custom middleware after these
+    'login.middleware.RoomAccessMiddleware',  # replace yourapp with your app name
 ]
+
 
 ROOT_URLCONF = 'awqaf.urls'
 
@@ -114,6 +117,7 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 
 USE_TZ = True
+
 
 
 # Static files (CSS, JavaScript, Images)

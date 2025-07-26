@@ -6,24 +6,14 @@ from .forms import RoomLoginForm, MarkForm
 import csv
 import os
 import re
+from django.http import HttpResponseForbidden
 from django.conf import settings
 from screen.views import apply_automatic_status
+from django.shortcuts import redirect
+from django.contrib import messages
 
-def mobile_login(request):
-    if request.method == 'POST':
-        form = RoomLoginForm(request.POST)
-        if form.is_valid():
-            user = authenticate(
-                request,
-                username=form.cleaned_data['room_name'],
-                password=form.cleaned_data['password']
-            )
-            if user is not None:
-                login(request, user)
-                return redirect('/mobileapp/redirect-after-login/')
-    else:
-        form = RoomLoginForm()
-    return render(request, 'mobileapp/login.html', {'form': form})
+
+
 
 
 @login_required
@@ -31,7 +21,7 @@ def room_view(request, room_name):
     try:
         room_number = int(''.join(filter(str.isdigit, room_name)))
     except ValueError:
-        return redirect('/mobileapp/login')
+        return redirect('')
 
     students = Student.objects.filter(room=room_number).exclude(status='finished').order_by('position')
 
@@ -104,4 +94,6 @@ def mark_student_view(request, student_number):
         'form': form,
         'questions': questions,
     })
+
+
 

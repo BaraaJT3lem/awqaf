@@ -2,38 +2,39 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>الشاشة العامة</title>
-    <meta http-equiv="refresh" content="10">
     <style>
         body {
             font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
+            margin: 0; padding: 0;
             background-color: #f4f6f7;
             color: #333;
         }
 
         .rooms-table {
-            display: flex;
-            flex-wrap: nowrap;
-            direction: rtl;
-            justify-content: flex-start;
-            width: 100%;
+            display: block; /* inline-block children, nowrap container */
+            white-space: nowrap; /* prevent wrapping */
             overflow-x: auto;
-            padding: 0 1em;
-            box-sizing: border-box;
+            overflow-y: hidden;
+            width: 100vw;
+            direction: rtl;
+            -webkit-overflow-scrolling: touch; /* smooth on iOS */
+            scrollbar-width: thin;
+            
         }
 
         .room-column {
-            flex: 1 1 0;
-            min-width: 160px;
+            display: inline-block;
+            vertical-align: top;
+            width: 280px;
+            margin-left: 10px;
+            background: #f9f9f9;
             border: 1px solid #ccc;
             border-radius: 6px;
             padding: 0.5em;
-            background: #f9f9f9;
-            margin-left: 0.5em;
             box-sizing: border-box;
+            white-space: normal; /* allow wrap inside */
         }
 
         .room-header {
@@ -79,7 +80,7 @@
     </style>
 </head>
 <body>
-    <div class="rooms-table">
+    <div class="rooms-table" id="roomsTable">
         {% for room in rooms %}
             <div class="room-column">
                 <div class="room-header">لجنة {{ room }}</div>
@@ -113,7 +114,7 @@
                                 {% if student.latest_grade %}
                                     | : {{ student.latest_grade }} - {{ student.latest_result }}
                                 {% elif student.status in 'waiting,on_waiting_list' and student_wait_times %}
-                                    | {{ student_wait_times|dict_get:student.number }} 
+                                    | {{ student_wait_times|dict_get:student.number }}
                                 {% endif %}
                             </div>
                         </div>
@@ -125,6 +126,143 @@
             </div>
         {% endfor %}
     </div>
+
+    <script>
+        (function() {
+            const container = document.getElementById('roomsTable');
+            if (!container) {
+                console.error('No .rooms-table found');
+                return;
+            }
+        
+            // Detect RTL scroll type for horizontal
+            function getRtlScrollType() {
+                const div = document.createElement('div');
+                div.style.width = '100px';
+                div.style.height = '100px';
+                div.style.overflow = 'scroll';
+                div.style.direction = 'rtl';
+                div.style.position = 'absolute';
+                div.style.visibility = 'hidden';
+        
+                const inner = document.createElement('div');
+                inner.style.width = '200px';
+                inner.style.height = '100px';
+        
+                div.appendChild(inner);
+                document.body.appendChild(div);
+        
+                div.scrollLeft = 0;
+                const initialScrollLeft = div.scrollLeft;
+                div.scrollLeft = 1;
+                const scrolledScrollLeft = div.scrollLeft;
+        
+                document.body.removeChild(div);
+        
+                if (initialScrollLeft === 0) {
+                    if (scrolledScrollLeft === 0) {
+                        return 'negative'; // Firefox
+                    } else {
+                        return 'default'; // Chrome, Safari
+                    }
+                } else {
+                    return 'reverse'; // IE, Edge
+                }
+            }
+        
+            const rtlScrollType = getRtlScrollType();
+        
+            let horizontalDirection = 1; // 1 = forward, -1 = backward
+            let verticalDirection = 1;   // 1 = down, -1 = up
+            const scrollDuration = 20000; // 20 seconds full scroll
+            const pauseDuration = 5000;   // 5 seconds pause
+        
+            let isUserInteracting = false;
+        
+            container.addEventListener('wheel', () => { isUserInteracting = true; });
+            container.addEventListener('touchstart', () => { isUserInteracting = true; });
+            container.addEventListener('touchend', () => { isUserInteracting = false; });
+        
+            function getHorizontalScroll() {
+                if (rtlScrollType === 'negative') {
+                    return -container.scrollLeft;
+                } else if (rtlScrollType === 'reverse') {
+                    return container.scrollWidth - container.clientWidth - container.scrollLeft;
+                } else {
+                    return container.scrollLeft;
+                }
+            }
+        
+            function setHorizontalScroll(value) {
+                if (rtlScrollType === 'negative') {
+                    container.scrollLeft = -value;
+                } else if (rtlScrollType === 'reverse') {
+                    container.scrollLeft = container.scrollWidth - container.clientWidth - value;
+                } else {
+                    container.scrollLeft = value;
+                }
+            }
+        
+            function smoothScroll(timestamp, startTime, startHScroll, startVScroll, onComplete) {
+                if (!startTime) startTime = timestamp;
+                const elapsed = timestamp - startTime;
+        
+                const maxHScroll = container.scrollWidth - container.clientWidth;
+                const maxVScroll = container.scrollHeight - container.clientHeight;
+        
+                let progress = elapsed / scrollDuration;
+                if (progress > 1) progress = 1;
+        
+                // Horizontal scroll calculation
+                let targetH;
+                if (horizontalDirection === 1) {
+                    targetH = startHScroll + progress * maxHScroll;
+                } else {
+                    targetH = startHScroll - progress * maxHScroll;
+                }
+                targetH = Math.min(Math.max(targetH, 0), maxHScroll);
+        
+                // Vertical scroll calculation
+                let targetV;
+                if (verticalDirection === 1) {
+                    targetV = startVScroll + progress * maxVScroll;
+                } else {
+                    targetV = startVScroll - progress * maxVScroll;
+                }
+                targetV = Math.min(Math.max(targetV, 0), maxVScroll);
+        
+                setHorizontalScroll(targetH);
+                container.scrollTop = targetV;
+        
+                if (elapsed < scrollDuration && !isUserInteracting) {
+                    requestAnimationFrame(ts => smoothScroll(ts, startTime, startHScroll, startVScroll, onComplete));
+                } else {
+                    onComplete();
+                }
+            }
+        
+            function startScrollCycle() {
+                smoothScroll(null, null, getHorizontalScroll(), container.scrollTop, () => {
+                    horizontalDirection = -horizontalDirection;
+                    verticalDirection = -verticalDirection;
+                    setTimeout(() => {
+                        if (!isUserInteracting) {
+                            startScrollCycle();
+                        }
+                    }, pauseDuration);
+                });
+            }
+        
+            // Start auto scroll after 1 second if no user interaction
+            setTimeout(() => {
+                if (!isUserInteracting) {
+                    startScrollCycle();
+                }
+            }, 1000);
+        })();
+        </script>
+        
+        
+        
 </body>
 </html>
-

@@ -24,6 +24,19 @@
         .mistake-label:hover {
             background-color: #80cbc4;
         }
+        .remove-btn {
+            margin-right: 8px;
+            color: red;
+            cursor: pointer;
+            font-weight: bold;
+            display: inline-block;
+            transition: transform 0.2s;
+        }
+        
+        .remove-btn:hover {
+            transform: scale(1.2);
+        }
+        
         .mistakes-container {
             margin-top: 10px;
             text-align: right;
@@ -40,6 +53,12 @@
     </style>
 </head>
 <body>
+    {% if student.status == 'finished' %}
+    <div style="text-align:center; margin: 3em; font-size: 1.2em; color: red;">
+        لا يمكنك تعديل نتيجة طالب انتهى امتحانه.
+    </div>
+{% else %}
+
 
 <div class="student-info">
     <table>
@@ -57,6 +76,8 @@
     {% else %}
         {% include "mobileapp/form_nz.html" %}
     {% endif %}
+
+
 </div>
 
 <script>
@@ -66,15 +87,17 @@
         line.className = 'mistake-line';
         line.dataset.value = value;
         line.dataset.category = category;
-        line.textContent = `خطأ في ${category}: ${text}`;
+        line.innerHTML = `خطأ في ${category}: ${text} <span class="remove-btn" title="إزالة">❌</span>`;
     
-        line.addEventListener('click', () => {
+        const removeBtn = line.querySelector('.remove-btn');
+        removeBtn.addEventListener('click', () => {
             line.remove();
             calculateFinalGrade();
         });
     
         container.appendChild(line);
     }
+    
     
     function calculateFinalGrade() {
         let totalDeduction = 0;
@@ -138,6 +161,8 @@
     </script>
     
     
+    <!-- Your entire current template content goes here -->
+    {% endif %}
 
 </body>
 </html>

@@ -15,6 +15,11 @@
     </script>
 </head>
 <body>
+    <nav>    <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="logout-button">تسجيل الخروج</button>
+    </form>
+</nav>
     <h2>الطلاب في {{ room_name|replace:"room,اللجنة " }}</h2>
     {% for student in students %}
         <div class="student">
