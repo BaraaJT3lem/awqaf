@@ -12,17 +12,20 @@ class Command(BaseCommand):
             return
 
         room_count = settings.room_count
+        subroom_count = 2  # Or whatever max subrooms per room you want
+
         password = '12345678'
 
         for i in range(1, room_count + 1):
-            username = f'room{i}'
-            user, created = User.objects.get_or_create(username=username)
-            user.set_password(password)
-            user.is_staff = False  # NO admin access
-            user.is_superuser = False
-            user.save()
+            for j in range(1, subroom_count + 1):
+                username = f'room{i}-{j}'
+                user, created = User.objects.get_or_create(username=username)
+                user.set_password(password)
+                user.is_staff = False
+                user.is_superuser = False
+                user.save()
 
-            if created:
-                self.stdout.write(self.style.SUCCESS(f"Created user: {username}"))
-            else:
-                self.stdout.write(self.style.WARNING(f"Updated user: {username}"))
+                if created:
+                    self.stdout.write(self.style.SUCCESS(f"Created user: {username}"))
+                else:
+                    self.stdout.write(self.style.WARNING(f"Updated user: {username}"))  

@@ -11,31 +11,22 @@
             background-color: #f4f6f7;
             color: #333;
         }
-
         .rooms-table {
-            display: block; /* inline-block children, nowrap container */
-            white-space: nowrap; /* prevent wrapping */
+            white-space: nowrap;
             overflow-x: auto;
-            overflow-y: hidden;
             width: 100vw;
-            direction: rtl;
-            -webkit-overflow-scrolling: touch; /* smooth on iOS */
-            scrollbar-width: thin;
-            
         }
+        
 
         .room-column {
+            max-height: 85vh;
+            overflow-y: auto;
             display: inline-block;
             vertical-align: top;
             width: 280px;
             margin-left: 10px;
-            background: #f9f9f9;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            padding: 0.5em;
-            box-sizing: border-box;
-            white-space: normal; /* allow wrap inside */
         }
+        
 
         .room-header {
             font-weight: bold;
@@ -126,141 +117,141 @@
             </div>
         {% endfor %}
     </div>
+    
 
     <script>
-        (function() {
+        (function () {
             const container = document.getElementById('roomsTable');
-            if (!container) {
-                console.error('No .rooms-table found');
-                return;
-            }
+            const rooms = Array.from(container.querySelectorAll('.room-column'));
         
-            // Detect RTL scroll type for horizontal
-            function getRtlScrollType() {
-                const div = document.createElement('div');
-                div.style.width = '100px';
-                div.style.height = '100px';
-                div.style.overflow = 'scroll';
-                div.style.direction = 'rtl';
-                div.style.position = 'absolute';
-                div.style.visibility = 'hidden';
+            if (!rooms.length) return;
         
-                const inner = document.createElement('div');
-                inner.style.width = '200px';
-                inner.style.height = '100px';
+            let currentRoomIndex = 0;
+            const scrollDuration = 10000;  // 10s to scroll down or up
+            const pauseAtEnd = 5000;       // 5s pause at bottom of each room
+            const pauseAfterAll = 5000;    // 5s pause before refreshing
         
-                div.appendChild(inner);
-                document.body.appendChild(div);
+            function scrollElement(el, direction = 1, duration = 10000, callback) {
+                const startTime = performance.now();
+                const startScroll = el.scrollTop;
+                const maxScroll = el.scrollHeight - el.clientHeight;
+                const targetScroll = direction === 1 ? maxScroll : 0;
+                const distance = targetScroll - startScroll;
         
-                div.scrollLeft = 0;
-                const initialScrollLeft = div.scrollLeft;
-                div.scrollLeft = 1;
-                const scrolledScrollLeft = div.scrollLeft;
+                function step(timestamp) {
+                    const elapsed = timestamp - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    el.scrollTop = startScroll + distance * progress;
         
-                document.body.removeChild(div);
-        
-                if (initialScrollLeft === 0) {
-                    if (scrolledScrollLeft === 0) {
-                        return 'negative'; // Firefox
+                    if (progress < 1) {
+                        requestAnimationFrame(step);
                     } else {
-                        return 'default'; // Chrome, Safari
+                        callback && callback();
                     }
-                } else {
-                    return 'reverse'; // IE, Edge
                 }
+        
+                requestAnimationFrame(step);
             }
         
-            const rtlScrollType = getRtlScrollType();
+            function scrollRoom(index) {
+                const room = rooms[index];
+                const roomOffset = room.offsetLeft;
+                container.scrollTo({ left: roomOffset, behavior: 'smooth' });
         
-            let horizontalDirection = 1; // 1 = forward, -1 = backward
-            let verticalDirection = 1;   // 1 = down, -1 = up
-            const scrollDuration = 20000; // 20 seconds full scroll
-            const pauseDuration = 5000;   // 5 seconds pause
+                room.scrollTop = 0;
         
-            let isUserInteracting = false;
-        
-            container.addEventListener('wheel', () => { isUserInteracting = true; });
-            container.addEventListener('touchstart', () => { isUserInteracting = true; });
-            container.addEventListener('touchend', () => { isUserInteracting = false; });
-        
-            function getHorizontalScroll() {
-                if (rtlScrollType === 'negative') {
-                    return -container.scrollLeft;
-                } else if (rtlScrollType === 'reverse') {
-                    return container.scrollWidth - container.clientWidth - container.scrollLeft;
-                } else {
-                    return container.scrollLeft;
-                }
-            }
-        
-            function setHorizontalScroll(value) {
-                if (rtlScrollType === 'negative') {
-                    container.scrollLeft = -value;
-                } else if (rtlScrollType === 'reverse') {
-                    container.scrollLeft = container.scrollWidth - container.clientWidth - value;
-                } else {
-                    container.scrollLeft = value;
-                }
-            }
-        
-            function smoothScroll(timestamp, startTime, startHScroll, startVScroll, onComplete) {
-                if (!startTime) startTime = timestamp;
-                const elapsed = timestamp - startTime;
-        
-                const maxHScroll = container.scrollWidth - container.clientWidth;
-                const maxVScroll = container.scrollHeight - container.clientHeight;
-        
-                let progress = elapsed / scrollDuration;
-                if (progress > 1) progress = 1;
-        
-                // Horizontal scroll calculation
-                let targetH;
-                if (horizontalDirection === 1) {
-                    targetH = startHScroll + progress * maxHScroll;
-                } else {
-                    targetH = startHScroll - progress * maxHScroll;
-                }
-                targetH = Math.min(Math.max(targetH, 0), maxHScroll);
-        
-                // Vertical scroll calculation
-                let targetV;
-                if (verticalDirection === 1) {
-                    targetV = startVScroll + progress * maxVScroll;
-                } else {
-                    targetV = startVScroll - progress * maxVScroll;
-                }
-                targetV = Math.min(Math.max(targetV, 0), maxVScroll);
-        
-                setHorizontalScroll(targetH);
-                container.scrollTop = targetV;
-        
-                if (elapsed < scrollDuration && !isUserInteracting) {
-                    requestAnimationFrame(ts => smoothScroll(ts, startTime, startHScroll, startVScroll, onComplete));
-                } else {
-                    onComplete();
-                }
-            }
-        
-            function startScrollCycle() {
-                smoothScroll(null, null, getHorizontalScroll(), container.scrollTop, () => {
-                    horizontalDirection = -horizontalDirection;
-                    verticalDirection = -verticalDirection;
+                // Scroll down
+                scrollElement(room, 1, scrollDuration, () => {
+                    // Pause at bottom
                     setTimeout(() => {
-                        if (!isUserInteracting) {
-                            startScrollCycle();
-                        }
-                    }, pauseDuration);
+                        // Scroll up
+                        scrollElement(room, -1, scrollDuration, () => {
+                            currentRoomIndex++;
+        
+                            if (currentRoomIndex < rooms.length) {
+                                scrollRoom(currentRoomIndex);
+                            } else {
+                                // Done all rooms, pause then refresh
+                                setTimeout(() => location.reload(), pauseAfterAll);
+                            }
+                        });
+                    }, pauseAtEnd);
                 });
             }
         
-            // Start auto scroll after 1 second if no user interaction
-            setTimeout(() => {
-                if (!isUserInteracting) {
-                    startScrollCycle();
-                }
-            }, 1000);
+            scrollRoom(currentRoomIndex);
         })();
         </script>
+<!-- Legend for statuses -->
+<!-- Legend for statuses -->
+<div style="
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100vw;
+    background-color: #fff;
+    border-top: 1px solid #ccc;
+    padding: 1em 2em;
+    direction: rtl;
+    font-size: 0.9em;
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+">
+    <div style="
+        display: flex; 
+        gap: 1.5em; 
+        flex-wrap: nowrap; 
+        max-width: 3000px; 
+        width: 100%; 
+        justify-content: center;
+    ">
+        <div style="
+            background-color: #2ecc71; 
+            color: white; 
+            padding: 0.9em 0; 
+            border-radius: 4px; 
+            flex-grow: 1; 
+            text-align: center;
+            min-width: 0;
+            margin: 0 0.5em;
+        ">في الامتحان</div>
+        <div style="
+            background-color: #f1c40f; 
+            color: black; 
+            padding: 0.9em 0; 
+            border-radius: 4px; 
+            flex-grow: 1; 
+            text-align: center;
+            min-width: 0;
+            margin: 0 0.5em;
+        ">انتظار</div>
+        <div style="
+            background-color: #e67e22; 
+            color: white; 
+            padding: 0.9em 0; 
+            border-radius: 4px; 
+            flex-grow: 1; 
+            text-align: center;
+            min-width: 0;
+            margin: 0 0.5em;
+        ">قائمة الانتظار</div>
+        <div style="
+            background-color: #bdc3c7; 
+            color: black; 
+            padding: 0.9em 0; 
+            border-radius: 4px; 
+            flex-grow: 1; 
+            text-align: center;
+            min-width: 0;
+            margin: 0 0.5em;
+        ">منتهي</div>
+    </div>
+</div>
+
+
+        
         
         
         

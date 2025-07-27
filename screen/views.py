@@ -2,7 +2,6 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from collections import defaultdict, Counter
-from django.db.models import Max
 import random
 from collections import defaultdict
 from django.db.models import Max
@@ -21,12 +20,8 @@ from django.db.models import Max
 from django.contrib.admin.views.decorators import staff_member_required
 from .models import Student, ExamResult, ScreenSettings
 from django.shortcuts import render
-import datetime
 import os
-
 import csv
-from datetime import datetime, timedelta
-from django.utils.timezone import localtime
 import openpyxl
 from django.conf import settings
 import json
@@ -241,70 +236,82 @@ def add_student(request):
 
 
 
+
 @require_POST
 @login_required
-def submit_grade(request, student_number):
+def submit_grade(request, student_number, subroom):
     student = get_object_or_404(Student, number=student_number)
-
-    # Get final grade from form based on exam type
+    
+    # Parse exam config
     if student.exam_type == "gh":
-        final_grade = float(request.POST.get("final_grade", "100"))
-        pass_threshold = 80
         expected_questions = 3
+        pass_threshold = 80
     elif student.exam_type == "nz":
-        final_grade = float(request.POST.get("final_grade1", "100"))
-        pass_threshold = 90
         expected_questions = 5
+        pass_threshold = 90
     else:
-        final_grade = 1
-        pass_threshold = 0
         expected_questions = 0
+        pass_threshold = 0
 
-    # Parse mistakes JSON
-    mistakes_json_str = request.POST.get("mistakes_json", "{}")
+    # Get submitted final grade for this subroom from form
     try:
-        mistakes = json.loads(mistakes_json_str)
-    except json.JSONDecodeError:
-        mistakes = {}
+        final_grade = float(request.POST.get("final_grade", "100"))
+    except ValueError:
+        final_grade = 100
 
-    # You can add logic here if you want to validate number of questions answered
-    answered_questions = len(mistakes.keys())
-    if answered_questions < expected_questions:
-        pass  # Optional: add warning or ignore
-
-    # Determine result
-    result = "ناجح" if final_grade >= pass_threshold else "إعادة"
-
-    # Save exam result
-    ExamResult.objects.create(
+    # Save/update this subroom's partial result with a temporary 'result' value
+    exam_result, created = ExamResult.objects.update_or_create(
         number=student.number,
-        name=student.name,
-        grade=final_grade,
-        result=result,
-        room=student.room
+        sub_room=subroom,
+        defaults={
+            'name': student.name,
+            'grade': final_grade,
+            'result': 'قيد التقييم',  # temporary placeholder to satisfy NOT NULL
+            'room': student.room,
+        }
     )
 
-    # Update student status
-    student.status = 'finished'
-    student.save()
+    # Check all subroom grades for this student
+    subroom_results = ExamResult.objects.filter(number=student.number).exclude(sub_room=0)
+    grades = [er.grade for er in subroom_results]
 
-    # Call your automatic status update
-    apply_automatic_status()
+    if len(grades) >= 2:  # assuming 2 subrooms always
+        avg_grade = sum(grades) / len(grades)
+        result = "ناجح" if avg_grade >= pass_threshold else "إعادة"
 
-    # Log to CSV
-    csv_path = os.path.join(settings.BASE_DIR, 'grades_log.csv')
-    file_exists = os.path.isfile(csv_path)
-    with open(csv_path, mode='a', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(['Student Number', 'Name', 'Final Grade', 'Result'])
-        writer.writerow([student.number, student.name, final_grade, result])
+        # Save final summary with sub_room=0 to indicate final average
+        ExamResult.objects.update_or_create(
+            number=student.number,
+            sub_room=0,
+            defaults={
+                'name': student.name,
+                'grade': avg_grade,
+                'result': result,
+                'room': student.room,
+            }
+        )
 
-    # Set session flag to prevent regrading this student in this session
-    request.session[f'graded_student_{student_number}'] = True
+        # Mark student finished
+        student.status = 'finished'
+        student.save()
 
-    # Redirect to the room page after grading
-    return redirect(f"/mobileapp/room/room{student.room}/")
+        # Log to CSV after final grade calculated
+        csv_path = os.path.join(settings.BASE_DIR, 'grades_log.csv')
+        file_exists = os.path.isfile(csv_path)
+        with open(csv_path, mode='a', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(['Student Number', 'Name', 'Final Grade', 'Result', 'Sub Room'])
+            writer.writerow([student.number, student.name, avg_grade, result, 'final_average'])
+
+        # Redirect to room page (choose your preferred subroom here)
+        return redirect(f"/mobileapp/room/room{student.room}/1/")
+
+    else:
+        avg_grade = sum(grades) / len(grades)
+        messages.info(request, f"تم تسجيل درجة هذا القسم. الدرجة الحالية هي {avg_grade:.2f}. انتظر القسم الآخر لإكمال التقييم.")
+        # Redirect to parent room page even on first submission
+        return redirect(f"/mobileapp/room/room{student.room}/1/")
 
 @login_required
 @staff_member_required
@@ -379,7 +386,7 @@ def upload_excel(request):
 
             if not exam_type:
                 print(f"Unknown exam type: {exam_type_arabic} in row: {row}")
-                continue  # skip invalid rows
+                continue
 
             current_number += 1
 
@@ -395,6 +402,7 @@ def upload_excel(request):
         except Exception as e:
             print("Error in row:", row, str(e))
             continue
+
     apply_automatic_status()
     return redirect('/screen/add-student')
 
@@ -524,12 +532,13 @@ def export_students_excel(request):
             sorted_students = sorted(grouped[institute], key=lambda x: student_times.get(x.number, ''))
             for stu in sorted_students:
                 write_student_row(stu)
-        filename = f"All_Students_{datetime.date.today()}.xlsx"
+        filename = f"All_Students_{datetime.today().date()}.xlsx"
     else:
         filtered_students = Student.objects.filter(institute_name=institute_name).order_by('room', 'number')
         for student in sorted(filtered_students, key=lambda x: student_times.get(x.number, '')):
             write_student_row(student)
-        filename = f"Students_{institute_name}_{datetime.date.today()}.xlsx"
+        filename = f"Students_{institute_name}_{datetime.today().date()}.xlsx"
+
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'

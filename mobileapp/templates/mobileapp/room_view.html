@@ -20,11 +20,14 @@
         <button type="submit" class="logout-button">تسجيل الخروج</button>
     </form>
 </nav>
-    <h2>الطلاب في {{ room_name|replace:"room,اللجنة " }}</h2>
+
+
+    <h2>الطلاب في اللجنة {{ room_number }}</h2>
     {% for student in students %}
         <div class="student">
             <strong>{{ student.number }}</strong> -
-            <a href="{% url 'mark_student' student.number %}">{{ student.name }}</a>
+            <a href="{% url 'mark_student' student.number subroom %}">{{ student.name }}</a>
+
 
             - <span style="color: {% if student.status == 'in_exam' %}green{% elif student.status == 'waiting' %}orange{% else %}gray{% endif %};">
                 {{ student.get_status_display }}

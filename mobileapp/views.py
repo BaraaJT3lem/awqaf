@@ -6,31 +6,38 @@ from .forms import RoomLoginForm, MarkForm
 import csv
 import os
 import re
-from django.http import HttpResponseForbidden
+from django.http import HttpResponse
 from django.conf import settings
 from screen.views import apply_automatic_status
 from django.shortcuts import redirect
 from django.contrib import messages
-
-
-
-
+from screen.models import ExamResult
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+from django.db.models import Avg
+from screen.models import Student
 
 @login_required
-def room_view(request, room_name):
-    try:
-        room_number = int(''.join(filter(str.isdigit, room_name)))
-    except ValueError:
-        return redirect('')
-
+def room_view(request, room_name, subroom):
+    # Get numeric room number from room_name like "room1"
+    match = re.match(r'room(\d+)', room_name)
+    if not match:
+        return HttpResponse("Invalid room name", status=400)
+    
+    room_number = int(match.group(1))
     students = Student.objects.filter(room=room_number).exclude(status='finished').order_by('position')
 
 
     return render(request, 'mobileapp/room_view.html', {
         'room_name': room_name,
-        'students': students
-
+        'room_number': room_number,
+        'subroom': subroom,
+        'students': students,
     })
+
+
+
+
 
 
 @login_required
@@ -42,58 +49,45 @@ def mobile_redirect_view(request):
         return redirect('/screen/add-student')
 
 
+
 @login_required
-def mark_student_view(request, student_number):
+def mark_student_view(request, student_number, subroom):
     student = get_object_or_404(Student, number=student_number)
 
+    # Get all grades for this student so far
+    subroom_results = ExamResult.objects.filter(number=student.number).exclude(sub_room=0)  # exclude final average
+    grades = [er.grade for er in subroom_results]
+
+    # Calculate current average grade
+    avg_grade = sum(grades)/len(grades) if grades else 100
+
+    # Determine exam questions based on exam type
     if student.exam_type in ["غيبا", "gh"]:
         questions = ['الأول', 'الثاني', 'الثالث']  # 3 questions
-        pass_threshold = 80
-    else:  # "نظرا", "nz"
-        questions = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس']  # 5 questions
-        pass_threshold = 90
-
-    if request.method == 'POST':
-        # Extract final_grade from POST (adjust input name as per your form)
-        try:
-            final_grade = float(request.POST.get("final_grade", "100"))
-        except ValueError:
-            final_grade = 100
-
-        result = "ناجح" if final_grade >= pass_threshold else "إعادة"
-
-        output_dir = os.path.join(settings.BASE_DIR, 'grades_output')
-        os.makedirs(output_dir, exist_ok=True)
-        file_path = os.path.join(output_dir, 'grades.csv')
-
-        with open(file_path, 'a', newline='', encoding='utf-8') as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow([student.number, student.name, final_grade, result])
-
-        room = student.room
-        student.delete()
-
-        next_student = Student.objects.filter(room=room, status='waiting').order_by('position').first()
-        
-        if next_student:
-            next_student.status = 'in_exam'
-            next_student.save()
-
-        nxt_student = Student.objects.filter(room=room, status='on_waiting_list').order_by('position').first()
-        if nxt_student:
-            nxt_student.status = 'waiting'
-            nxt_student.save()
-
-        return redirect(f'/mobileapp/room/room{room}/')
-
     else:
-        form = MarkForm()
+        questions = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس']  # 5 questions
 
+    # Render grading page with current average grade shown
     return render(request, 'mobileapp/mark_student.html', {
         'student': student,
-        'form': form,
+        'subroom': subroom,
+        'avg_grade': avg_grade,
         'questions': questions,
     })
 
 
+def some_view(request):
+    username = request.user.username  # e.g. 'room1-2'
+    match = re.match(r'(room\d+)-(\d+)', username)
+    if match:
+        room_name = match.group(1)
+        subroom = int(match.group(2))
+    else:
+        room_name = username
+        subroom = 1
 
+    return redirect('room_view', room_name=room_name, subroom=subroom)
+@login_required
+def room_redirect_default(request, room_name):
+    # Redirect to subroom 1 by default if subroom is missing
+    return redirect('room_view', room_name=room_name, subroom=1)

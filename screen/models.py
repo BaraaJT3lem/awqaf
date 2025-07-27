@@ -63,6 +63,7 @@ class Student(models.Model):
     memorized_parts = models.CharField(max_length=100, verbose_name="الأجزاء المحفوظة", blank=True, null=True)
     grade = models.FloatField(null=True, blank=True)
     mistakes_json = models.TextField(null=True, blank=True)
+    subroom = models.IntegerField(default=1)
     position = models.PositiveIntegerField(default=0)
 
 
@@ -119,3 +120,5 @@ class ExamResult(models.Model):
     result = models.CharField(max_length=50)
     room = models.IntegerField()
     timestamp = models.DateTimeField(auto_now_add=True)
+    sub_room = models.CharField(max_length=10, blank=True, null=True)  # new field for sub-room like 'room11', 'room12'
+
