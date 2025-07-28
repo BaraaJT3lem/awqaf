@@ -65,7 +65,7 @@
         <tr><th>رقم الطالب</th><td>{{ student.number }}</td></tr>
         <tr><th>الاسم والكنية</th><td>{{ student.name }}</td></tr>
         <tr><th>اسم الأب</th><td>{{ student.father_name|default:"لا يوجد بيانات" }}</td></tr>
-        <tr><th>تولد</th><td>{% if student.birth_date %}{{ student.birth_date|date:"Y" }}{% else %}غير محدد{% endif %}</td></tr>
+        <tr><th>تولد</th><td>{% if student.year %}{{ student.year|date:"Y" }}{% else %}غير محدد{% endif %}</td></tr>
         <tr><th>اسم المعهد</th><td>{{ student.institute_name|default:"لا يوجد بيانات" }}</td></tr>
         <tr><th>نوع الامتحان</th><td>{{ student.get_exam_type_display|default:"لا يوجد بيانات" }}</td></tr>
         <tr><th>الأجزاء</th><td>{{ student.memorized_parts|default:"لا يوجد بيانات" }}</td></tr>

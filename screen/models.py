@@ -57,13 +57,12 @@ class Student(models.Model):
     number = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100, verbose_name="الاسم والكنية")
     father_name = models.CharField(max_length=100, verbose_name="اسم الأب", blank=True, null=True)
-    birth_date = models.DateField(verbose_name="تاريخ الولادة", blank=True, null=True)
+    birth_year = models.IntegerField(null=True, blank=True, verbose_name="عام التولد")
     institute_name = models.CharField(max_length=100, verbose_name="اسم المعهد", blank=True, null=True)
     exam_type = models.CharField(max_length=10, choices=EXAM_TYPE_CHOICES, verbose_name="غيباً/نظراً", blank=True, null=True)
     memorized_parts = models.CharField(max_length=100, verbose_name="الأجزاء المحفوظة", blank=True, null=True)
     grade = models.FloatField(null=True, blank=True)
     mistakes_json = models.TextField(null=True, blank=True)
-    subroom = models.IntegerField(default=1)
     position = models.PositiveIntegerField(default=0)
 
 

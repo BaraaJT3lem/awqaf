@@ -1,23 +1,26 @@
 from django import forms
 from .models import Student, ScreenSettings
+import datetime
+
+
+from screen.models import RoomQueue
 
 class StudentForm(forms.ModelForm):
     class Meta:
         model = Student
         fields = [
-            'name', 'father_name', 'birth_date', 'institute_name',
-            'exam_type', 'memorized_parts', 'room'
+            'name', 'father_name', 'birth_year',  # 👈 changed from birth_date to birth_year
+            'institute_name', 'exam_type', 'memorized_parts', 'room'
         ]
         labels = {
             'name': 'الاسم والكنية',
             'father_name': 'اسم الأب',
-            'birth_date': 'عام التولد',
+            'birth_year': 'سنة التولد',  # 👈 update label here
             'institute_name': 'اسم المعهد',
             'exam_type': 'غيباً/نظراً',
             'memorized_parts': 'الأجزاء المحفوظة',
             'room': 'اللجنة',
         }
-
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

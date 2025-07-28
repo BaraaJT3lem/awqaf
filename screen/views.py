@@ -1,31 +1,29 @@
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
-from django.views.decorators.http import require_POST
-from collections import defaultdict, Counter
-import random
-from collections import defaultdict
-from django.db.models import Max
-from django.utils import timezone
-from .models import Student, ScreenSettings, ExamResult, STATUS_CHOICES
-from .forms import StudentForm, ScreenSettingsForm
-from django.contrib import messages
-from django.http import HttpResponse
-from django.utils.encoding import smart_str
-from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font
-from datetime import datetime, time, timedelta
-from django.utils.timezone import make_aware, localtime, get_current_timezone
-from collections import defaultdict
-from django.db.models import Max
-from django.contrib.admin.views.decorators import staff_member_required
-from .models import Student, ExamResult, ScreenSettings
-from django.shortcuts import render
 import os
 import csv
-import openpyxl
-from django.conf import settings
 import json
-from django.db import models
+import random
+import openpyxl
+from datetime import datetime, time, timedelta, date
+from collections import Counter, defaultdict
+
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import HttpResponse
+from django.utils.encoding import smart_str
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.contrib.admin.views.decorators import staff_member_required
+from django.views.decorators.http import require_POST
+from django.conf import settings
+from django.db.models import Max
+from django.utils.timezone import make_aware, localtime, get_current_timezone
+
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font
+from django.db.models import Max  # <-- add this at the top of your file
+
+from .models import Student, ScreenSettings, ExamResult, STATUS_CHOICES, RoomQueue
+from .forms import StudentForm, ScreenSettingsForm
+
 
 
 def get_room_count():
@@ -33,12 +31,17 @@ def get_room_count():
     return settings.room_count if settings else 5
 
 def get_least_loaded_room():
-    room_count = get_room_count()
+    room_count = ScreenSettings.get_room_count()
     rooms = list(range(1, room_count + 1))
-    counts = Counter(Student.objects.values_list('room', flat=True))
+    random.shuffle(rooms)  # ✅ shuffle room order randomly
+
+    # Count students in each room
+    room_counts = Counter(Student.objects.values_list('room', flat=True))
     for r in rooms:
-        counts.setdefault(r, 0)
-    return min(rooms, key=lambda r: counts[r])
+        room_counts.setdefault(r, 0)
+
+    # Return the least loaded room (ties broken randomly)
+    return min(rooms, key=lambda r: room_counts[r])
 
 @login_required
 @staff_member_required
@@ -146,7 +149,7 @@ def update_student_status(request, student_number):
                 # Assign next available position in new room
                 max_position = (
                     Student.objects.filter(room=new_room)
-                    .aggregate(max_pos=models.Max('position'))['max_pos']
+                    .aggregate(max_pos=Max('position'))['max_pos']
                 )
                 student.position = (max_position or 0) + 1
                 student.save()
@@ -200,19 +203,26 @@ def add_student(request):
         if form.is_valid():
             student = form.save(commit=False)
 
-            # Set position to the next available one in the room
+            # Automatically assign the least loaded room
+            student.room = get_least_loaded_room()
+
+            # Set position to the next available one in the assigned room
             max_position = (
                 Student.objects.filter(room=student.room)
                 .aggregate(max_pos=Max('position'))
             )['max_pos']
             student.position = (max_position or 0) + 1
+
             student.save()
             messages.success(request, 'تمت إضافة الطالب بنجاح.')
             return redirect('add_student')
         else:
+            print(form.errors)
             messages.error(request, 'الرجاء التحقق من صحة البيانات.')
 
     rooms = list(range(1, get_room_count() + 1))
+    juz_list = list(range(1, 31))  # Juz numbers from 1 to 30
+
     students_by_room = {
         room: Student.objects.filter(room=room).order_by('position')
         for room in rooms
@@ -227,6 +237,7 @@ def add_student(request):
     context = {
         'form': form,
         'rooms': rooms,
+        'juz_list': juz_list,           # Pass juz_list to template
         'students_by_room': students_by_room,
         'status_choices': STATUS_CHOICES,
         'all_institutes': all_institutes,
@@ -309,7 +320,6 @@ def submit_grade(request, student_number, subroom):
 
     else:
         avg_grade = sum(grades) / len(grades)
-        messages.info(request, f"تم تسجيل درجة هذا القسم. الدرجة الحالية هي {avg_grade:.2f}. انتظر القسم الآخر لإكمال التقييم.")
         # Redirect to parent room page even on first submission
         return redirect(f"/mobileapp/room/room{student.room}/1/")
 
@@ -361,27 +371,50 @@ def upload_excel(request):
     if not file or not file.name.endswith(".xlsx"):
         return redirect('/screen/add-student')
 
+    # Get selected Juz number and room from POST
+    juz_number_raw = request.POST.get('juz_number', '').strip()
+    juz_room_raw = request.POST.get('juz_room', '').strip()
+
+    # Convert to int if valid, else None
+    try:
+        juz_number = int(juz_number_raw) if juz_number_raw else None
+    except:
+        juz_number = None
+
+    try:
+        juz_room = int(juz_room_raw) if juz_room_raw else None
+    except:
+        juz_room = None
+
     wb = openpyxl.load_workbook(file)
     sheet = wb.active
 
     current_number = Student.objects.aggregate(Max('number'))['number__max'] or 0
 
+    queue, _ = RoomQueue.objects.get_or_create(pk=1)
+
     for row in sheet.iter_rows(min_row=2, values_only=True):
         if not any(row):
             continue
 
-        number_cell = str(row[0]).strip() if row[0] else ''
         name = str(row[1]).strip() if row[1] else ''
-
         if not name or "الاسم" in name:
             continue
 
         try:
             father_name = str(row[2]).strip() if row[2] else ''
-            birth_year = int(row[3]) if row[3] else None
+            birth_year_raw = row[3]
+            birth_year = None
+            if birth_year_raw:
+                try:
+                    birth_year = int(birth_year_raw)
+                except Exception as e:
+                    print(f"Invalid birth year in row: {row} -> {e}")
+                    birth_year = None
+
             institute = str(row[4]).strip() if row[4] else ''
             exam_type_arabic = str(row[5]).strip() if row[5] else ''
-            exam_type = EXAM_TYPE_MAP.get(exam_type_arabic, None)
+            exam_type = EXAM_TYPE_MAP.get(exam_type_arabic)
             parts = int(row[6]) if row[6] else 0
 
             if not exam_type:
@@ -390,21 +423,31 @@ def upload_excel(request):
 
             current_number += 1
 
+            # Determine assigned room:
+            if juz_number and juz_room and parts == juz_number:
+                assigned_room = juz_room
+            else:
+                assigned_room = queue.next_room()
+
             Student.objects.create(
                 number=current_number,
                 name=name,
                 father_name=father_name,
-                birth_date=f"{birth_year}-01-01" if birth_year else None,
+                birth_year=birth_year,
                 institute_name=institute,
                 exam_type=exam_type,
-                memorized_parts=parts
+                memorized_parts=parts,
+                room=assigned_room,
             )
+
         except Exception as e:
             print("Error in row:", row, str(e))
             continue
 
     apply_automatic_status()
     return redirect('/screen/add-student')
+
+
 
 def remove_student(request, student_number):
     if request.method == 'POST':
@@ -503,7 +546,7 @@ def export_students_excel(request):
             student.number,
             smart_str(student.name),
             smart_str(student.father_name or ''),
-            student.birth_date.year if student.birth_date else '',
+            student.birth_year if student.birth_year else '',
             smart_str(student.institute_name or ''),
             exam_type,
             student.memorized_parts or '',

@@ -1,0 +1,21 @@
+<!-- mobileapp/templates/mobileapp/room.html -->
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>لجنة {{ room_number }}</title>
+</head>
+<body>
+    <h2>الطلاب في لجنة {{ room_number }}</h2>
+
+    {% if students %}
+        <ul>
+            {% for student in students %}
+                <li>{{ student.number }} - {{ student.name }} ({{ student.status }})</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>لا يوجد طلاب في هذه اللجنة.</p>
+    {% endif %}
+</body>
+</html>

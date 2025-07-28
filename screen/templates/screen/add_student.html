@@ -219,6 +219,25 @@
         {% csrf_token %}
         <label for="file">رفع ملف Excel لإضافة طلاب:</label>
         <input type="file" name="file" accept=".xlsx" required>
+        
+    <label for="parts_rooms">اختر أجزاء محفوظة وربطها باللجان (يمكن اختيار أكثر من جزء):</label>
+    <label for="juz-select">اختر جزء معين لتعيين لجنة خاصة (اختياري):</label>
+    <select name="juz_number" id="juz-select">
+        <option value="">تلقائي</option>
+        {% for i in juz_list %}
+            <option value="{{ i }}">{{ i }}</option>
+        {% endfor %}
+    </select>
+    
+    <select name="juz_room" id="room-select">
+        <option value="">تلقائي</option>
+        {% for room_num in rooms %}
+            <option value="{{ room_num }}">{{ room_num }}</option>
+        {% endfor %}
+    </select>
+    
+    
+    
         <button type="submit">رفع وإضافة الطلاب</button>
     </form>
 
@@ -244,8 +263,8 @@
             <label for="id_father_name">اسم الأب:</label>
             {{ form.father_name }}
 
-            <label for="id_birth_date">سنة التولد:</label>
-            {{ form.birth_date }}
+            <label for="id_birth_year">سنة التولد:</label>
+            {{ form.birth_year }}
 
             <label for="id_institute_name">اسم المعهد:</label>
             {{ form.institute_name }}
