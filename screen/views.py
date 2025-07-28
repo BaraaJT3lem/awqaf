@@ -313,7 +313,7 @@ def submit_grade(request, student_number, subroom):
             writer = csv.writer(f)
             if not file_exists:
                 writer.writerow(['Student Number', 'Name', 'Final Grade', 'Result', 'Sub Room'])
-            writer.writerow([student.number, student.name, avg_grade, result, 'final_average'])
+            writer.writerow([student.number, student.name, avg_grade, result])
 
         # Redirect to room page (choose your preferred subroom here)
         return redirect(f"/mobileapp/room/room{student.room}/1/")
@@ -336,12 +336,17 @@ def edit_settings(request):
             new_room_count = new_settings.room_count
 
             if new_room_count != old_room_count:
-                # Reassign all students to fit new room count
                 students = list(Student.objects.all().exclude(status="finished"))
                 room_positions = {room: 0 for room in range(1, new_room_count + 1)}
 
                 for student in students:
-                    min_room = min(room_positions, key=room_positions.get)
+                    # Shuffle room list each time to add randomness
+                    rooms = list(room_positions.keys())
+                    random.shuffle(rooms)
+
+                    # Find the room with the minimal position count among shuffled rooms
+                    min_room = min(rooms, key=lambda r: room_positions[r])
+
                     room_positions[min_room] += 1
                     student.room = min_room
                     student.position = room_positions[min_room]
@@ -357,6 +362,7 @@ def edit_settings(request):
         form = ScreenSettingsForm(instance=old_settings)
 
     return render(request, 'screen/edit_settings.html', {'form': form})
+
 
 
 EXAM_TYPE_MAP = {
